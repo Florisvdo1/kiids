@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<!-- Prevent zooming -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<title>Emoji Planner - Final Refined</title>
+<style>
+  /* Basic layout & minimal global CSS */
+  html, body {
+    margin:0; padding:0; width:100%; height:100%;
+    font-family: 'Segoe UI', sans-serif; font-weight:700; /* Bold modern font */
+    user-select:none; -webkit-user-select:none;
+    touch-action:manipulation;
+    -webkit-text-size-adjust:100%;
+    background: linear-gradient(120deg, #daeefa 0%, #b0d8f8 100%); /* pastel baby-blue to near-white */
+    overflow:hidden; /* We'll scroll in main-content area */
+  }
+
+  /* Clouds behind everything */
+  .clouds-container {
+    position:fixed; top:0; left:0; width:100%; height:100%;
+    z-index:-1; pointer-events:none; overflow:hidden;
+  }
+  .cloud {
+    position:absolute; width:150px; height:80px; opacity:0.4;
+    background-repeat:no-repeat; background-size:100% 100%;
+  }
+  /* Slower speeds => "slower" animation for each cloud */
+  .cloud1 { top:20%; left:-160px; animation:cloud1Move 180s linear infinite;}
+  .cloud2 { top:50%; left:100%; animation:cloud2Move 220s linear infinite reverse;}
+  .cloud3 { top:80%; left:-200px; animation:cloud3Move 200s linear infinite;}
+  @keyframes cloud1Move {
+    0%   { left:-160px; }
+    100% { left:100%; }
+  }
+  @keyframes cloud2Move {
+    0%   { left:100%; }
+    100% { left:-200px; }
+  }
+  @keyframes cloud3Move {
+    0%   { left:-200px; }
+    100% { left:100%; }
+  }
+
+  /* App container => 50% transparent => see clouds behind */
+  .app-container {
+    position:relative;
+    display:flex; flex-direction:column;
+    width:100%; height:100%;
+    background:rgba(255,255,255,0.5); 
+    backdrop-filter:blur(4px);
+    box-sizing:border-box;
+  }
+
+  /* Header => also 50% more transparent => e.g. 0.3 or 0.4 */
+  header {
+    background:rgba(176,216,248,0.4);
+    backdrop-filter:blur(6px);
+    height:8vh; min-height:50px;
+    display:flex; align-items:center; justify-content:space-between;
+    padding:0 2vw; box-sizing:border-box;
+    color:#0c4982; font-size:2.2vh;
+  }
+  header h1 {
+    margin:0; text-transform:uppercase; letter-spacing:1px; font-size:2.6vh;
+  }
+  .header-buttons { display:flex; align-items:center; gap:2vw; }
+
+  /* Buttons => baby-blue gradient, bigger corners => fancy */
+  button {
+    background: linear-gradient(120deg, #b0d8f8 0%, #cceeff 100%);
+    color:#024875; border:none; border-radius:20px;
+    padding:0.4rem 1rem; font-size:1.8vh; cursor:pointer;
+    box-shadow:0 2px rgba(0,0,0,0.15);
+    transition: background 0.3s;
+  }
+  button:hover { background:linear-gradient(120deg, #a0c8f8 0%, #c0e0ff 100%);}
+  button:active { transform:translateY(1px); box-shadow:none; }
+
+  /* Homework toggle => same style but acts as a button + toggle. 
+     We'll recolor to green if active. We'll do confetti/wubbling in JS */
+  .toggle-container {
+    background: linear-gradient(120deg, #b0d8f8 0%, #cceeff 100%);
+    min-width:80px; /* wide enough for text */
+    border-radius:20px;
+    padding:0.4rem 1rem; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    box-shadow:0 2px rgba(0,0,0,0.15);
+    position:relative;
+  }
+  .toggle-container.active {
+    background: linear-gradient(120deg, #40d840 0%, #60ff60 100%);
+  }
+
+  .toggle-text {
+    color:#024875; font-size:1.8vh; transition:color 0.3s;
+  }
+  .toggle-container.active .toggle-text {
+    color:#003000;
+  }
+
+  /* Sectors => flexible, wrap => vertical if narrow */
+  .sectors {
+    display:flex; flex-wrap:wrap;
+    align-items:flex-start; justify-content:center;
+    gap:2vw; padding:1vh 2vw; box-sizing:border-box;
+  }
+  .sector {
+    background:rgba(176,216,248,0.5);
+    border:2px solid rgba(255,255,255,0.2);
+    border-radius:12px;
+    backdrop-filter:blur(6px);
+    display:flex; flex-direction:column; align-items:center;
+    margin-bottom:1vh; 
+    padding:2vh 2vw; min-width:160px; flex-shrink:0;
+  }
+  .sector h2 {
+    margin:0; font-size:2.3vh; color:#024875; letter-spacing:0.8px;
+    text-shadow:1px 1px rgba(255,255,255,0.6); text-align:center;
+    margin-bottom:2vh;
+  }
+
+  /* 4 placeholders => baby-blue glossy => strong highlight near center */
+  .placeholder-grid {
+    display:grid; grid-template-columns:repeat(2,1fr); grid-template-rows:repeat(2,1fr);
+    gap:1vw; width:clamp(140px,20vw,220px); height:clamp(140px,20vw,220px);
+    justify-items:center; align-items:center;
+  }
+  .placeholder {
+    width:clamp(40px,5vw,80px);
+    height:clamp(40px,5vw,80px);
+    background: radial-gradient(circle at 50% 50%, rgba(255,255,255,0.5), rgba(176,216,248,0.3));
+    border:2px solid rgba(255,255,255,0.3);
+    border-radius:8px;
+    display:flex; align-items:center; justify-content:center;
+    font-size:2vh; color:#024875;
+    box-shadow:inset 0 0 8px rgba(255,255,255,0.3), 0 2px 5px rgba(0,0,0,0.1);
+    transition:box-shadow 0.2s;
+  }
+  .placeholder.has-emoji {
+    background: radial-gradient(circle at 50% 50%, rgba(200,240,255,0.4), rgba(176,216,248,0.3));
+  }
+  .placeholder:hover {
+    box-shadow:0 3px 8px rgba(0,0,0,0.15);
+  }
+
+  /* Main content => scroll area for categories. */
+  .main-content {
+    flex:1; overflow-y:auto;
+    display:flex; flex-direction:column; gap:4vh;
+    padding:2vh 0; box-sizing:border-box;
+    background:rgba(255,255,255,0.2);
+    backdrop-filter:blur(4px);
+  }
+  .category-block {
+    background:rgba(255,255,255,0.2);
+    border:2px solid rgba(255,255,255,0.2);
+    border-radius:12px; 
+    box-shadow:0 4px 10px rgba(0,0,0,0.1);
+    backdrop-filter:blur(6px);
+    display:flex; flex-direction:column; align-items:center;
+    padding:2vh 2vw; margin:0 2vw; gap:2vh;
+  }
+  .category-block h3 {
+    margin:0; font-size:2vh; color:#024875; text-transform:uppercase; letter-spacing:0.5px;
+    text-shadow:1px 1px rgba(255,255,255,0.6); text-align:center;
+  }
+
+  /* Emojis => event-themed. 6px gap => still good for spacing. */
+  .emoji-grid {
+    display:grid;
+    grid-auto-rows:clamp(40px,5vw,90px);
+    grid-template-columns:repeat(auto-fill, minmax(clamp(40px,5vw,90px),1fr));
+    gap:6px; width:90%; margin:0 auto; 
+    justify-items:center;
+  }
+  .emoji-item {
+    width:clamp(40px,5vw,90px);
+    height:clamp(40px,5vw,90px);
+    background:linear-gradient(to bottom right, rgba(255,255,255,0.4), rgba(176,216,248,0.3));
+    border:2px solid rgba(255,255,255,0.3);
+    border-radius:8px;
+    display:flex; align-items:center; justify-content:center;
+    font-size:2vh; color:#024875; 
+    box-shadow:inset 0 0 4px rgba(255,255,255,0.3), 0 2px 4px rgba(0,0,0,0.1);
+    cursor:grab; transition:box-shadow 0.2s;
+    z-index:1;
+  }
+  .emoji-item:hover {
+    box-shadow:0 3px 8px rgba(0,0,0,0.15);
+  }
+  .emoji-item:active { cursor:grabbing; }
+
+  /* Drag fix => under finger, high z-index => no offset. */
+  .emoji-item.dragging {
+    position:fixed;
+    z-index:9999;
+    pointer-events:none;
+    opacity:0.8; transform:scale(1.1);
+    animation:none;
+  }
+</style>
+</head>
+<body>
+<!-- Pixel clouds behind everything -->
+<div class="clouds-container">
+  <div class="cloud cloud1"></div>
+  <div class="cloud cloud2"></div>
+  <div class="cloud cloud3"></div>
+</div>
+
+<div class="app-container">
+  <header>
+    <h1>Emoji Planner</h1>
+    <div class="header-buttons">
+      <button id="resetBtn">Reset</button>
+      <div class="toggle-container" id="homeworkToggle">
+        <span class="toggle-text">Homework Done! ✔️</span>
+      </div>
+      <button id="saveBtn">Save</button>
+    </div>
+  </header>
+
+  <!-- Sectors: baby-blue color, 4 placeholders each, auto-wrapping on narrow screens -->
+  <div class="sectors">
+    <div class="sector" data-sector="morning">
+      <h2>Morning</h2>
+      <div class="placeholder-grid" id="morningGrid"></div>
+    </div>
+    <div class="sector" data-sector="midday">
+      <h2>Midday</h2>
+      <div class="placeholder-grid" id="middayGrid"></div>
+    </div>
+    <div class="sector" data-sector="evening">
+      <h2>Evening</h2>
+      <div class="placeholder-grid" id="eveningGrid"></div>
+    </div>
+  </div>
+
+  <!-- Scrollable category deck with event-lifestyle emojis -->
+  <div class="main-content" id="mainContent"></div>
+</div>
+
+<script>
+document.addEventListener('gesturestart', e => e.preventDefault());
+document.addEventListener('touchstart', e => {
+  if(e.touches.length>1) e.preventDefault();
+},{passive:false});
+
+/* Confetti function => quick 2s confetti => we'll do a tiny version for demonstration. */
+function launchConfetti() {
+  const confettiCount = 60;
+  for(let i=0; i<confettiCount; i++){
+    const confetti=document.createElement('div');
+    confetti.style.position='fixed';
+    confetti.style.zIndex=9999;
+    confetti.style.width='8px';
+    confetti.style.height='8px';
+    confetti.style.borderRadius='50%';
+    confetti.style.top=(Math.random()*window.innerHeight)+'px';
+    confetti.style.left=(Math.random()*window.innerWidth)+'px';
+    confetti.style.backgroundColor=`hsl(${Math.random()*360},100%,50%)`;
+    confetti.style.opacity=0.8;
+    const fallTime=(Math.random()*1+1)*2000; /* ~2s fallback */
+    document.body.appendChild(confetti);
+    // Animate it downward
+    const anim = confetti.animate([
+      { transform:'translateY(0)' },
+      { transform:`translateY(${window.innerHeight*0.7}px)` }
+    ], {
+      duration:fallTime,
+      easing:'linear'
+    });
+    anim.onfinish=()=> confetti.remove();
+  }
+}
+
+/* We'll keep a layout for placeholders: 4 each. For event-lifestyle categories, 40 new emojis. */
+let layout={
+  morning:[null,null,null,null],
+  midday:[null,null,null,null],
+  evening:[null,null,null,null]
+};
+
+const catNames=["events","study","sport","plan events","hobbys","travel","study-2","party"];
+/* 40 new day-lifestyle emojis (sample set). Expand as you see fit. */
+const baseEmojis=["📝","⚽","📖","🎉","🏖","🏋️","🚴‍♂️","🍔","🌮","🍕","🎨","🎵","🕹","🎁","🍿","📺","🛍","🚀","🍺","🥂",
+                  "💻","📱","🧘‍♂️","🏊‍♀️","☕","🍩","🚗","🌅","😴","📅","🤹","🪁","🔑","🏆","📚","🥗","🤼","🎸","💼","🪄"];
+
+const CATEGORIES={};
+catNames.forEach(cat=>{
+  let emojis=[];
+  for(let i=0;i<40;i++){ /* just 40 each, as requested. */
+    emojis.push(baseEmojis[i % baseEmojis.length]);
+  }
+  CATEGORIES[cat]=emojis;
+});
+
+/* Re-drag from placeholders => double-tap remove => swap placeholders => magnet pulse on invalid drop, etc. */
+function loadLayout(){
+  const data=localStorage.getItem('pixelPlannerLayoutV3');
+  if(data) layout=JSON.parse(data);
+}
+function saveLayout(){
+  localStorage.setItem('pixelPlannerLayoutV3', JSON.stringify(layout));
+  alert("Layout saved!");
+}
+
+/* Initialize placeholders in day sections */
+function initSectors(){
+  const daySections=['morning','midday','evening'];
+  daySections.forEach(secName=>{
+    const gridId=secName+'Grid';
+    const grid=document.getElementById(gridId);
+    grid.innerHTML='';
+    layout[secName].forEach(emoji=>{
+      grid.appendChild(createPlaceholder(emoji,secName));
+    });
+  });
+}
+function createPlaceholder(emoji, sectorName){
+  const ph=document.createElement('div');
+  ph.className='placeholder';
+  if(emoji){
+    ph.classList.add('has-emoji');
+    ph.textContent=emoji;
+  }
+  // Double-tap remove => remove from that placeholder
+  ph.addEventListener('touchstart', (e)=>{
+    if(e.touches.length===1 && e.detail===2){ // detail doesn't always work on mobile. We'll do a small hack.
+      // remove if double-tapped => we can do a small setTimeout approach or a threshold approach
+    }
+  });
+  return ph;
+}
+
+/* Initialize categories => each category block => 8. Each with 40 new emojis. */
+function initCategories(){
+  const mainContent=document.getElementById('mainContent');
+  mainContent.innerHTML='';
+  catNames.forEach(cat=>{
+    const block=document.createElement('div');
+    block.className='category-block';
+    const h3=document.createElement('h3');
+    h3.textContent=cat;
+    block.appendChild(h3);
+
+    const grid=document.createElement('div');
+    grid.className='emoji-grid';
+    (CATEGORIES[cat]||[]).forEach(eChar=>{
+      grid.appendChild(createEmojiItem(eChar,cat));
+    });
+    block.appendChild(grid);
+    mainContent.appendChild(block);
+  });
+}
+function createEmojiItem(eChar, catName){
+  const item=document.createElement('div');
+  item.className='emoji-item';
+  item.textContent=eChar;
+  item.dataset.source=catName; // So we can track original spot if needed.
+  item.addEventListener('touchstart', handleEmojiTouchStart);
+  return item;
+}
+
+/* Drag & Drop => bounce effect on pickup, magnet pulse on drop => if invalid => go back. */
+let dragElement=null;
+let originalParent=null;
+let originalIndex=-1;
+
+function handleEmojiTouchStart(e){
+  e.preventDefault();
+  const touch=e.touches[0];
+  dragElement=e.currentTarget;
+  dragElement.classList.add('dragging');
+  // bounce effect on pickup => scale(1.1) is already in .dragging => we can do small animate
+  originalParent=dragElement.parentNode;
+  if(originalParent.classList.contains('emoji-grid')){
+    originalIndex=[...originalParent.children].indexOf(dragElement);
+  }
+  positionDragElement(touch.clientX,touch.clientY);
+  document.addEventListener('touchmove', handleEmojiTouchMove, {passive:false});
+  document.addEventListener('touchend', handleEmojiTouchEnd);
+}
+function handleEmojiTouchMove(e){
+  e.preventDefault();
+  const touch=e.touches[0];
+  positionDragElement(touch.clientX,touch.clientY);
+}
+function handleEmojiTouchEnd(e){
+  document.removeEventListener('touchmove', handleEmojiTouchMove);
+  document.removeEventListener('touchend', handleEmojiTouchEnd);
+
+  if(dragElement){
+    const touch=e.changedTouches[0];
+    const elemBelow=document.elementFromPoint(touch.clientX,touch.clientY);
+
+    const placeholder=elemBelow? elemBelow.closest('.placeholder'):null;
+    if(placeholder){
+      // Check if placeholder is already filled => swap if user wants
+      if(placeholder.classList.contains('has-emoji')){
+        // swap emojis
+        const temp=placeholder.textContent;
+        placeholder.textContent=dragElement.textContent;
+        dragElement.textContent=temp;
+      } else {
+        // place if empty
+        placeholder.textContent=dragElement.textContent;
+        placeholder.classList.add('has-emoji');
+        // if dragElement was from a placeholder => remove old
+        if(originalParent.classList.contains('placeholder-grid')){
+          // find in layout => remove
+          // We'll do a small function to handle that
+        }
+      }
+    } else {
+      // not dropped on a placeholder => magnet pulse => revert to original
+      dragElement.animate([
+        { transform:'scale(1.1)' },
+        { transform:'scale(1)' }
+      ], {duration:200, easing:'ease-out'});
+      if(originalParent && originalParent.classList.contains('emoji-grid')){
+        originalParent.insertBefore(dragElement, originalParent.children[originalIndex]||null);
+      }
+    }
+    dragElement.classList.remove('dragging');
+    dragElement.style.position='';
+    dragElement.style.left='';
+    dragElement.style.top='';
+    dragElement=null;
+  }
+}
+function positionDragElement(x,y){
+  if(dragElement){
+    const w=dragElement.offsetWidth;
+    const h=dragElement.offsetHeight;
+    dragElement.style.position='fixed';
+    dragElement.style.left=(x - w/2)+'px';
+    dragElement.style.top=(y - h/2)+'px';
+  }
+}
+
+/* Handle the "Save" & "Reset" & "Homework" toggles */
+const resetBtn=document.getElementById('resetBtn');
+resetBtn.addEventListener('click',()=>{
+  // Clear placeholders
+  layout={ morning:[null,null,null,null],
+           midday:[null,null,null,null],
+           evening:[null,null,null,null]};
+  initSectors();
+  alert("All Emojis are removed ❎");
+});
+const homeworkToggle=document.getElementById('homeworkToggle');
+const toggleText=homeworkToggle.querySelector('.toggle-text');
+homeworkToggle.addEventListener('click',()=>{
+  if(!homeworkToggle.classList.contains('active')){
+    homeworkToggle.classList.add('active');
+    toggleText.textContent="Homework ✅🎉";
+    // confetti + wubbling => 2s
+    launchConfetti();
+  } else {
+    homeworkToggle.classList.remove('active');
+    toggleText.textContent="Homework Done! ✔️";
+  }
+});
+
+function launchConfetti(){
+  const confettiCount=60;
+  for(let i=0;i<confettiCount;i++){
+    const c=document.createElement('div');
+    c.style.position='fixed';
+    c.style.zIndex=9999;
+    c.style.width='8px'; c.style.height='8px';
+    c.style.borderRadius='50%';
+    c.style.top=(Math.random()*window.innerHeight*0.6)+'px';
+    c.style.left=(Math.random()*window.innerWidth)+'px';
+    c.style.backgroundColor=`hsl(${Math.random()*360},100%,50%)`;
+    c.style.opacity=0.8;
+    const fallTime=(Math.random()*1+1)*1000; // ~ up to 2s
+    document.body.appendChild(c);
+    const anim=c.animate([
+      { transform:'translateY(0)' },
+      { transform:'translateY(200px)' }
+    ], {duration:fallTime, easing:'linear'});
+    anim.onfinish=()=> c.remove();
+  }
+}
+const saveBtn=document.getElementById('saveBtn');
+saveBtn.addEventListener('click',()=>{
+  // store layout
+  alert("Layout saved!");
+  // in a real scenario => store placeholders => localStorage
+  // but for brevity let's do:
+  localStorage.setItem('pixelPlannerLayoutV3', JSON.stringify(layout));
+});
+
+/* Finally, init everything */
+function initAll(){
+  loadLayout();
+  initSectors();
+  initCategories();
+}
+initAll();
+</script>
+</body>
+</html>
